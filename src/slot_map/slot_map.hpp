@@ -11,6 +11,9 @@ class key {
         size_t gen;
         key();
         key(size_t ind, size_t gen);
+        key& operator*() {
+            return *this;
+        }
         void update_gen();
         void set_ind(size_t ind);
 };
@@ -23,17 +26,62 @@ void key::set_ind(size_t new_index) {
     ind = new_index;
 }
 
+template <typename slot_map>
+class slot_map_iterator {
+    public:
+        using value_type = size_t;
+        using pointer_type = size_t*;
+        using reference_type = size_t&;
+        using T = key;
+        using Tptr = key*;
+        using Tref = key&;
+    public:
+        slot_map_iterator(size_t* ptr, slot_map* sm) : ptr(ptr), sm(sm) {};
+        slot_map_iterator& operator++() {
+            ptr++;
+            return *this;
+        }
+        slot_map_iterator operator++(int) {
+            slot_map_iterator iterator = *this;
+            ++(*this);
+            return iterator;
+        }
+        slot_map_iterator& operator--() {
+            ptr--;
+            return *this;
+        }
+        slot_map_iterator operator--(int) {
+            slot_map_iterator iterator = *this;
+            --(*this);
+            return iterator;
+        }
+        Tref operator[](size_t index) {
+            return sm->get_key(*(ptr + index));
+        }
+        Tptr operator->() {
+            return &sm->get_key(*ptr);
+        }
+        Tref operator*() {
+            return *(sm->get_key(*ptr));
+        }
+        bool operator==(const slot_map_iterator& other) const {
+            return ptr == other.ptr;
+        }
+        bool operator!=(const slot_map_iterator& other) const {
+            return !(*this == other);
+        }
+        
+    private:
+        pointer_type ptr;
+        slot_map* sm;
+};
+
+
 
 template <typename T>
 class slot_map {
     public:
-        slot_map();
-        ~slot_map();
-        size_t get_capacity();
-        size_t get_size();
-        key insert(T val); // insert pops free head of indices
-        void remove(const key& val); // remove adds to tail of indices
-        T operator[](const key& val);
+        using iterator = slot_map_iterator<slot_map<T>>;
     private:
         key* indices;
         T* data;
@@ -43,30 +91,50 @@ class slot_map {
         size_t capacity;
         size_t size;
         void expand();
-        void shrink();
+    public:
+        slot_map() : indices(nullptr), data(nullptr), erase(nullptr), head(0), tail(0), capacity(0), size(0) {}
+        ~slot_map() {
+            delete[] indices;
+            delete[] data;
+            delete[] erase;
+        }
+        // getter methods for testing
+        size_t get_capacity() const {
+            return capacity;
+        }
+        size_t get_size() const {
+            return size;
+        }
+        key* get_indices() const {
+            return indices;
+        }
+        T* get_data() const {
+            return data;
+        }
+        size_t* get_erase() const {
+            return erase;
+        }
+        size_t get_head() const {
+            return head;
+        }
+        size_t get_tail() const {
+            return tail;
+        }
+        // Iterator functions
+        iterator begin() {
+            return iterator(erase, this);
+        }
+        iterator end() {
+            return iterator(erase + size, this);
+        }
+        // Usage operations
+        key insert(T val); // insert pops free head of indices
+        void remove(const key& val); // remove adds to tail of indices
+        T operator[](const key& val);
+        key get_key(const size_t val);
 };
 
-template<typename T>
-slot_map<T>::slot_map() : indices(nullptr), data(nullptr), erase(nullptr), head(0), tail(0), capacity(0), size(0) {}
-
-template<typename T>
-slot_map<T>::~slot_map() {
-    delete[] indices;
-    delete[] data;
-    delete[] erase;
-}
-
 template <typename T>
-size_t slot_map<T>::get_capacity() {
-    return capacity;
-}
-
-template <typename T>
-size_t slot_map<T>::get_size() {
-    return size;
-}
-
-template<typename T>
 void slot_map<T>::expand() {
     size_t new_capacity;
     key* new_indices;
@@ -103,14 +171,17 @@ void slot_map<T>::expand() {
     capacity = new_capacity;
 }
 
-template<typename T>
+template <typename T>
 key slot_map<T>::insert(T val) {
     if (size == capacity) {
         slot_map<T>::expand();
     }
     data[size] = val;
+    erase[size] = head;
+    // construct key to be handed to user
     key* head_key = &indices[head];
     key ret_key = key(head, head_key->gen);
+    // update head and old head key
     size_t new_head = head_key->ind;
     head_key->ind = size;
     head = new_head;
@@ -134,12 +205,10 @@ void slot_map<T>::remove(const key& val) {
         erase[index->ind] = erase[size-1];
         indices[erase[size-1]].ind = index->ind;
     } else {
-        data[index->ind] = 0;
-        erase[index->ind] = 0;
+        erase[index->ind] = -1;
     }
     // cleanup end of array
-    data[size-1] = 0;
-    erase[size-1] = 0;
+    erase[size-1] = -1;
     // update index to refer to itself
     index->ind = val.ind;
     index->update_gen(); // to ensure current val can't refer to this again
@@ -158,4 +227,12 @@ T slot_map<T>::operator[](const key& val) {
     }
     return data[index.ind];
 }
+template <typename T>
+key slot_map<T>::get_key(const size_t val) {
+    if (val >= capacity) {
+        throw std::invalid_argument("Invalid index.");
+    }
+    return indices[val];
+}
+
 #endif
