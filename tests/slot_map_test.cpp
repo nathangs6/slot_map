@@ -83,6 +83,22 @@ TEST(InsertGetDelete, ShiftedDataAfterDelete) {
     ASSERT_EQ(sm[o2], 2);
 }
 
+TEST(InsertDeleteCycle, Simple) {
+    slot_map<int> sm;
+    key o1 = sm.insert(1);
+    key o2 = sm.insert(2);
+    key o3 = sm.insert(3);
+    sm.remove(o2);
+    key o4 = sm.insert(4);
+    key o5 = sm.insert(5);
+    key o6 = sm.insert(6);
+    ASSERT_EQ(sm[o1], 1);
+    ASSERT_EQ(sm[o3], 3);
+    ASSERT_EQ(sm[o4], 4);
+    ASSERT_EQ(sm[o5], 5);
+    ASSERT_EQ(sm[o6], 6);
+}
+
 TEST(Iterator, Simple) {
     slot_map<int> sm;
     key keys[3];
@@ -108,8 +124,10 @@ TEST(Iterator, WithRemoval) {
     sm.remove(keys[2]);
     keys[2] = keys[5];
     int i = 0;
+    key k;
     for (slot_map_iterator<slot_map<int>> it = sm.begin(); it != sm.end(); it++) {
-        ASSERT_EQ(sm[keys[i]], sm[*it]);
+        k = *it;
+        ASSERT_EQ(sm[keys[i]], sm.get_data_by_index(k));
         i++;
     }
 }
